@@ -47,7 +47,8 @@ jobs:
                   output: trivy-results.sarif
                   severity: CRITICAL,HIGH
                   ignore-unfixed: true
-                  vuln-type: library,config,secret
+                  vuln-type: library
+                  scanners: vuln,secret,config
 
             # 📤 Upload to GitHub Security tab
             - name: Upload SARIF Report
