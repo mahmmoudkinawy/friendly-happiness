@@ -54,14 +54,14 @@ jobs:
                   vuln-type: library
                   scanners: vuln,secret,config
 
-            # 📤 Upload to GitHub Security tab
+            # 📤 Upload SARIF to GitHub Security tab (v4 recommended)
             - name: Upload SARIF Report
-              uses: github/codeql-action/upload-sarif@v3
+              uses: github/codeql-action/upload-sarif@v4
               with:
                   sarif_file: trivy-results.sarif
 
-            # 📦 Save report as artifact (downloadable)
-            - name: Upload JSON Report
+            # 📦 Save JSON report as artifact (downloadable)
+            - name: Run Trivy Scan (JSON)
               uses: aquasecurity/trivy-action@v0.35.0
               with:
                   scan-type: fs
@@ -69,7 +69,8 @@ jobs:
                   output: trivy-results.json
                   severity: CRITICAL,HIGH
                   ignore-unfixed: true
-                  vuln-type: library,config,secret
+                  vuln-type: library
+                  scanners: vuln,secret,config
 
             - name: Upload Artifact
               uses: actions/upload-artifact@v4
@@ -85,5 +86,6 @@ jobs:
                   format: table
                   severity: CRITICAL,HIGH
                   ignore-unfixed: true
-                  vuln-type: library,config,secret
+                  vuln-type: library
+                  scanners: vuln,secret,config
                   exit-code: 1
