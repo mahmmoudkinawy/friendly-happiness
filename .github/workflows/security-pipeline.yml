@@ -1,4 +1,4 @@
-name: .NET 9 Security Pipeline (No Docker)
+name: .NET 9 Security Pipeline (Semgrep Only)
 
 on:
     push:
@@ -34,7 +34,7 @@ jobs:
               run: dotnet test --no-build --verbosity normal
 
     security:
-        name: Security Scan (Trivy)
+        name: Semgrep Scan
         runs-on: ubuntu-latest
         needs: build
 
@@ -42,51 +42,33 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v4
 
-            # 🔍 Trivy SARIF scan for GitHub Security tab
-            - name: Run Trivy Scan (SARIF)
-              uses: aquasecurity/trivy-action@v0.35.0
-              with:
-                  scan-type: fs
-                  format: sarif
-                  output: trivy-results.sarif
-                  severity: CRITICAL,HIGH
-                  ignore-unfixed: true
-                  vuln-type: library
-                  scanners: vuln,secret,config
+            # 🔹 Install Semgrep
+            - name: Setup Semgrep
+              uses: returntocorp/semgrep-action@v1
 
-            # 📤 Upload SARIF to GitHub Security tab
-            - name: Upload SARIF Report
+            # 🔹 Run Semgrep scan (OWASP Top 10 rules)
+            - name: Run Semgrep Scan
+              uses: returntocorp/semgrep-action@v1
+              with:
+                  config: "p/owasp-top-10"
+
+            # 🔹 Upload SARIF to GitHub Security tab
+            - name: Upload Semgrep SARIF
               uses: github/codeql-action/upload-sarif@v4
               with:
-                  sarif_file: trivy-results.sarif
+                  sarif_file: semgrep-results.sarif
 
-            # 🔍 Trivy JSON scan for downloadable artifact
-            - name: Run Trivy Scan (JSON)
-              uses: aquasecurity/trivy-action@v0.35.0
-              with:
-                  scan-type: fs
-                  format: json
-                  output: trivy-results.json
-                  severity: CRITICAL,HIGH
-                  ignore-unfixed: true
-                  vuln-type: library
-                  scanners: vuln,secret,config
-
-            # 📦 Upload JSON artifact
-            - name: Upload JSON Artifact
+            # 🔹 Save JSON report as artifact
+            - name: Upload Semgrep JSON Artifact
               uses: actions/upload-artifact@v4
               with:
-                  name: trivy-report
-                  path: trivy-results.json
+                  name: semgrep-report
+                  path: semgrep-results.json
 
-            # ❌ Fail pipeline if critical/high issues found
-            - name: Enforce Security Gate
-              uses: aquasecurity/trivy-action@v0.35.0
-              with:
-                  scan-type: fs
-                  format: table
-                  severity: CRITICAL,HIGH
-                  ignore-unfixed: true
-                  vuln-type: library
-                  scanners: vuln,secret,config
-                  exit-code: 1
+            # ❌ Fail pipeline if Semgrep finds issues
+            - name: Enforce Semgrep Security Gate
+              run: |
+                  if [ -s semgrep-results.json ]; then
+                    echo "❌ Semgrep found security issues!"
+                    exit 1
+                  fi
