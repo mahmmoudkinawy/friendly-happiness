@@ -42,7 +42,7 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v4
 
-            # 🔍 Main scan (dependencies + secrets + config)
+            # 🔍 Trivy SARIF scan for GitHub Security tab
             - name: Run Trivy Scan (SARIF)
               uses: aquasecurity/trivy-action@v0.35.0
               with:
@@ -54,13 +54,13 @@ jobs:
                   vuln-type: library
                   scanners: vuln,secret,config
 
-            # 📤 Upload SARIF to GitHub Security tab (v4 recommended)
+            # 📤 Upload SARIF to GitHub Security tab
             - name: Upload SARIF Report
               uses: github/codeql-action/upload-sarif@v4
               with:
                   sarif_file: trivy-results.sarif
 
-            # 📦 Save JSON report as artifact (downloadable)
+            # 🔍 Trivy JSON scan for downloadable artifact
             - name: Run Trivy Scan (JSON)
               uses: aquasecurity/trivy-action@v0.35.0
               with:
@@ -72,13 +72,14 @@ jobs:
                   vuln-type: library
                   scanners: vuln,secret,config
 
-            - name: Upload Artifact
+            # 📦 Upload JSON artifact
+            - name: Upload JSON Artifact
               uses: actions/upload-artifact@v4
               with:
                   name: trivy-report
                   path: trivy-results.json
 
-            # ❌ Fail pipeline if critical issues found
+            # ❌ Fail pipeline if critical/high issues found
             - name: Enforce Security Gate
               uses: aquasecurity/trivy-action@v0.35.0
               with:
