@@ -26,10 +26,12 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@v4
 
-            # ── 2. Full scan (SARIF → GitHub Security tab) ───────────────────────────
+            # ── 2. Full scan via semgrep scan (SARIF → GitHub Security tab) ─────────────
+            #    semgrep ci is used when you have a Semgrep Cloud token; semgrep scan
+            #    works without any account and supports --severity / --sarif / --error.
             - name: Run Semgrep (SARIF output)
               run: |
-                  semgrep ci \
+                  semgrep scan \
                     --config auto \
                     --config "p/csharp" \
                     --config "p/owasp-top-ten" \
@@ -41,8 +43,6 @@ jobs:
                     --severity ERROR \
                     --severity WARNING \
                     --timeout 300
-              env:
-                  SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }} # optional — for Semgrep Cloud dashboard
               continue-on-error: true # upload results even when findings exist
 
             # ── 3. Upload SARIF to GitHub Security > Code scanning alerts ─────────────
@@ -68,7 +68,7 @@ jobs:
                     --severity WARNING \
                     --timeout 300 || true
 
-            # ── 5. Fail the job only on HIGH-severity / CRITICAL findings ─────────────
+            # ── 5. Fail the job only on ERROR-severity findings ───────────────────────
             - name: Fail on critical findings
               run: |
                   semgrep scan \
@@ -81,6 +81,15 @@ jobs:
                     --severity ERROR \
                     --error \
                     --timeout 300
+
+            # ── ALTERNATIVE: If you have a Semgrep Cloud account ─────────────────────
+            #    Replace steps 2-5 above with this single step (semgrep ci handles
+            #    SARIF upload, PR comments, and severity gating automatically):
+            #
+            #  - name: Run Semgrep CI (cloud)
+            #    run: semgrep ci
+            #    env:
+            #      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
             # ── 6. Archive raw results as a build artifact ────────────────────────────
             - name: Upload SARIF artifact
