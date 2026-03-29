@@ -38,19 +38,47 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v4
 
-            - name: Trivy FS Scan (Dependencies + CVEs)
+            # 🔍 Main scan (dependencies + secrets + config)
+            - name: Run Trivy Scan (SARIF)
+              uses: aquasecurity/trivy-action@v0.35.0
+              with:
+                  scan-type: fs
+                  format: sarif
+                  output: trivy-results.sarif
+                  severity: CRITICAL,HIGH
+                  ignore-unfixed: true
+                  vuln-type: library,config,secret
+
+            # 📤 Upload to GitHub Security tab
+            - name: Upload SARIF Report
+              uses: github/codeql-action/upload-sarif@v3
+              with:
+                  sarif_file: trivy-results.sarif
+
+            # 📦 Save report as artifact (downloadable)
+            - name: Upload JSON Report
+              uses: aquasecurity/trivy-action@v0.35.0
+              with:
+                  scan-type: fs
+                  format: json
+                  output: trivy-results.json
+                  severity: CRITICAL,HIGH
+                  ignore-unfixed: true
+                  vuln-type: library,config,secret
+
+            - name: Upload Artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: trivy-report
+                  path: trivy-results.json
+
+            # ❌ Fail pipeline if critical issues found
+            - name: Enforce Security Gate
               uses: aquasecurity/trivy-action@v0.35.0
               with:
                   scan-type: fs
                   format: table
                   severity: CRITICAL,HIGH
                   ignore-unfixed: true
-                  exit-code: 1
-
-            - name: Trivy Secret Scan
-              uses: aquasecurity/trivy-action@v0.35.0
-              with:
-                  scan-type: fs
-                  scanners: secret
-                  format: table
+                  vuln-type: library,config,secret
                   exit-code: 1
