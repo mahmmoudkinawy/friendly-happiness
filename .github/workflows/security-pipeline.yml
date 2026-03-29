@@ -26,26 +26,24 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@v4
 
-            # ── 2. Full scan via semgrep scan (SARIF → GitHub Security tab) ─────────────
-            #    semgrep ci is used when you have a Semgrep Cloud token; semgrep scan
-            #    works without any account and supports --severity / --sarif / --error.
-            - name: Run Semgrep (SARIF output)
+            # ── 2. SARIF scan — two configs only:
+            #      • "auto"          → Semgrep's free community rules (no account needed)
+            #      • ".semgrep.yml"  → your custom rules in the repo root
+            #
+            #    The p/ shorthand packs (p/csharp, p/owasp-top-ten, etc.) require a
+            #    Semgrep Cloud account to resolve in CI; without a token they are either
+            #    silently skipped or return 0 rules. Use the custom rules file instead.
+            - name: Run Semgrep — SARIF output
               run: |
                   semgrep scan \
                     --config auto \
-                    --config "p/csharp" \
-                    --config "p/owasp-top-ten" \
-                    --config "p/sql-injection" \
-                    --config "p/command-injection" \
-                    --config "p/secrets" \
+                    --config .semgrep.yml \
                     --sarif \
                     --output semgrep-results.sarif \
-                    --severity ERROR \
-                    --severity WARNING \
                     --timeout 300
-              continue-on-error: true # upload results even when findings exist
+              continue-on-error: true # always produce the SARIF file for upload
 
-            # ── 3. Upload SARIF to GitHub Security > Code scanning alerts ─────────────
+            # ── 3. Upload SARIF → GitHub Security > Code scanning alerts ─────────────
             - name: Upload SARIF to GitHub
               uses: github/codeql-action/upload-sarif@v3
               if: always()
@@ -53,45 +51,27 @@ jobs:
                   sarif_file: semgrep-results.sarif
                   category: semgrep
 
-            # ── 4. Human-readable summary in the Actions log ─────────────────────────
-            - name: Run Semgrep (text summary)
+            # ── 4. Human-readable log summary ────────────────────────────────────────
+            - name: Run Semgrep — text summary
               run: |
                   semgrep scan \
                     --config auto \
-                    --config "p/csharp" \
-                    --config "p/owasp-top-ten" \
-                    --config "p/sql-injection" \
-                    --config "p/command-injection" \
-                    --config "p/secrets" \
+                    --config .semgrep.yml \
                     --text \
-                    --severity ERROR \
-                    --severity WARNING \
                     --timeout 300 || true
 
-            # ── 5. Fail the job only on ERROR-severity findings ───────────────────────
-            - name: Fail on critical findings
+            # ── 5. Gate: fail the job if any ERROR-severity rule fires ───────────────
+            #    Remove --error (or change --severity to WARNING) to make this advisory.
+            - name: Fail on ERROR findings
               run: |
                   semgrep scan \
                     --config auto \
-                    --config "p/csharp" \
-                    --config "p/owasp-top-ten" \
-                    --config "p/sql-injection" \
-                    --config "p/command-injection" \
-                    --config "p/secrets" \
+                    --config .semgrep.yml \
                     --severity ERROR \
                     --error \
                     --timeout 300
 
-            # ── ALTERNATIVE: If you have a Semgrep Cloud account ─────────────────────
-            #    Replace steps 2-5 above with this single step (semgrep ci handles
-            #    SARIF upload, PR comments, and severity gating automatically):
-            #
-            #  - name: Run Semgrep CI (cloud)
-            #    run: semgrep ci
-            #    env:
-            #      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
-
-            # ── 6. Archive raw results as a build artifact ────────────────────────────
+            # ── 6. Archive SARIF for download from the Actions run page ──────────────
             - name: Upload SARIF artifact
               uses: actions/upload-artifact@v4
               if: always()
@@ -99,3 +79,16 @@ jobs:
                   name: semgrep-sarif
                   path: semgrep-results.sarif
                   retention-days: 30
+
+            # ─────────────────────────────────────────────────────────────────────────
+            # OPTIONAL — Semgrep Cloud (free tier available at semgrep.dev)
+            #
+            # If you create a free account and add SEMGREP_APP_TOKEN as a repo secret,
+            # replace steps 2-5 with this single step. It resolves p/ packs, decorates
+            # PRs, and manages severity gating from the Cloud dashboard:
+            #
+            #  - name: Run Semgrep CI (cloud)
+            #    run: semgrep ci
+            #    env:
+            #      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+            # ─────────────────────────────────────────────────────────────────────────
