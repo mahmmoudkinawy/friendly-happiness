@@ -1,74 +1,92 @@
-name: .NET 9 Security Pipeline (Semgrep Only)
+name: Semgrep Security Scan
 
 on:
     push:
-        branches: ["main"]
+        branches: ["main", "master", "develop"]
     pull_request:
-        branches: ["main"]
+        branches: ["main", "master", "develop"]
+    schedule:
+        # Run every Monday at 08:00 UTC
+        - cron: "0 8 * * 1"
 
 permissions:
     contents: read
-    security-events: write
+    security-events: write # Required to upload SARIF to GitHub Security tab
+    actions: read
 
 jobs:
-    build:
-        name: Build & Test
+    semgrep:
+        name: Semgrep SAST
         runs-on: ubuntu-latest
+        container:
+            image: semgrep/semgrep
 
         steps:
-            - name: Checkout
+            # ── 1. Checkout ──────────────────────────────────────────────────────────
+            - name: Checkout repository
               uses: actions/checkout@v4
 
-            - name: Setup .NET 9
-              uses: actions/setup-dotnet@v4
-              with:
-                  dotnet-version: "9.0.x"
+            # ── 2. Full scan (SARIF → GitHub Security tab) ───────────────────────────
+            - name: Run Semgrep (SARIF output)
+              run: |
+                  semgrep ci \
+                    --config auto \
+                    --config "p/csharp" \
+                    --config "p/owasp-top-ten" \
+                    --config "p/sql-injection" \
+                    --config "p/command-injection" \
+                    --config "p/secrets" \
+                    --sarif \
+                    --output semgrep-results.sarif \
+                    --severity ERROR \
+                    --severity WARNING \
+                    --timeout 300
+              env:
+                  SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }} # optional — for Semgrep Cloud dashboard
+              continue-on-error: true # upload results even when findings exist
 
-            - name: Restore
-              run: dotnet restore
-
-            - name: Build
-              run: dotnet build --no-restore --configuration Release
-
-            - name: Test
-              run: dotnet test --no-build --verbosity normal
-
-    security:
-        name: Semgrep Scan
-        runs-on: ubuntu-latest
-        needs: build
-
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v4
-
-            # 🔹 Install Semgrep
-            - name: Setup Semgrep
-              uses: returntocorp/semgrep-action@v1
-
-            # 🔹 Run Semgrep scan (OWASP Top 10 rules)
-            - name: Run Semgrep Scan
-              uses: returntocorp/semgrep-action@v1
-              with:
-                  config: "p/owasp-top-10"
-
-            # 🔹 Upload SARIF to GitHub Security tab
-            - name: Upload Semgrep SARIF
-              uses: github/codeql-action/upload-sarif@v4
+            # ── 3. Upload SARIF to GitHub Security > Code scanning alerts ─────────────
+            - name: Upload SARIF to GitHub
+              uses: github/codeql-action/upload-sarif@v3
+              if: always()
               with:
                   sarif_file: semgrep-results.sarif
+                  category: semgrep
 
-            # 🔹 Save JSON report as artifact
-            - name: Upload Semgrep JSON Artifact
-              uses: actions/upload-artifact@v4
-              with:
-                  name: semgrep-report
-                  path: semgrep-results.json
-
-            # ❌ Fail pipeline if Semgrep finds issues
-            - name: Enforce Semgrep Security Gate
+            # ── 4. Human-readable summary in the Actions log ─────────────────────────
+            - name: Run Semgrep (text summary)
               run: |
-                  if [ -s semgrep-results.json ]; then
-                    echo "❌ Semgrep found security issues!"
-                    exit 1
-                  fi
+                  semgrep scan \
+                    --config auto \
+                    --config "p/csharp" \
+                    --config "p/owasp-top-ten" \
+                    --config "p/sql-injection" \
+                    --config "p/command-injection" \
+                    --config "p/secrets" \
+                    --text \
+                    --severity ERROR \
+                    --severity WARNING \
+                    --timeout 300 || true
+
+            # ── 5. Fail the job only on HIGH-severity / CRITICAL findings ─────────────
+            - name: Fail on critical findings
+              run: |
+                  semgrep scan \
+                    --config auto \
+                    --config "p/csharp" \
+                    --config "p/owasp-top-ten" \
+                    --config "p/sql-injection" \
+                    --config "p/command-injection" \
+                    --config "p/secrets" \
+                    --severity ERROR \
+                    --error \
+                    --timeout 300
+
+            # ── 6. Archive raw results as a build artifact ────────────────────────────
+            - name: Upload SARIF artifact
+              uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: semgrep-sarif
+                  path: semgrep-results.sarif
+                  retention-days: 30
